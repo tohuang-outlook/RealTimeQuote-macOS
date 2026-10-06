@@ -127,8 +127,7 @@ struct QuoteBoardPresentationState: Equatable {
     }
 
     private static func currencyText(_ value: Decimal?) -> String {
-        guard let value else { return "--" }
-        return currencyFormatter.string(from: value as NSDecimalNumber) ?? "--"
+        QuotePriceFormatter.currencyText(value)
     }
 
     private static func volumeText(_ value: Decimal?) -> String {
@@ -154,14 +153,12 @@ struct QuoteBoardPresentationState: Equatable {
         case let value where value >= thousand:
             return abbreviatedText(value / thousand, suffix: "K")
         default:
-            return currencyFormatter.string(from: value as NSDecimalNumber) ?? "--"
+            return QuotePriceFormatter.currencyText(value)
         }
     }
 
     private static func changeAmountText(_ absolute: Decimal?) -> String {
-        guard let absolute else { return "--" }
-        let absoluteText = signedDecimalFormatter.string(from: absolute as NSDecimalNumber) ?? "--"
-        return absoluteText
+        QuotePriceFormatter.signedAmountText(absolute)
     }
 
     private static func changePercentText(_ percent: Decimal?) -> String {
@@ -174,18 +171,6 @@ struct QuoteBoardPresentationState: Equatable {
         return "Open, Mid Price \(secondaryLineFormatter.string(from: updatedAt))"
     }
 
-    private static let currencyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.currencySymbol = "$"
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 2
-        formatter.usesGroupingSeparator = true
-        return formatter
-    }()
-
     private static let percentFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.locale = Locale(identifier: "en_US")
@@ -196,18 +181,6 @@ struct QuoteBoardPresentationState: Equatable {
         formatter.maximumFractionDigits = 2
         formatter.positiveSuffix = "%"
         formatter.negativeSuffix = "%"
-        return formatter
-    }()
-
-    private static let signedDecimalFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .decimal
-        formatter.positivePrefix = "+"
-        formatter.negativePrefix = "-"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        formatter.usesGroupingSeparator = true
         return formatter
     }()
 
@@ -535,12 +508,6 @@ private struct PriceAlertEditorView: View {
     }
 
     private static func currencyText(_ value: Decimal) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 2
-        return formatter.string(from: value as NSDecimalNumber) ?? value.description
+        QuotePriceFormatter.currencyText(value)
     }
 }

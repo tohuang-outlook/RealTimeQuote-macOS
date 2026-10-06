@@ -51,4 +51,39 @@ final class QuoteBoardPresentationStateTests: XCTestCase {
         XCTAssertEqual(presentation.connectionState, .live)
         XCTAssertEqual(presentation.lastSelectionError, "ignored")
     }
+
+    func testPresentationStateUsesFourFractionDigitsForLowPricedAssets() {
+        let snapshot = QuoteSnapshot(
+            exchange: .coinbase,
+            pair: .dogeUSD,
+            lastPrice: Decimal(string: "0.1234"),
+            absoluteChange: Decimal(string: "0.0006"),
+            percentChange: Decimal(string: "0.49"),
+            high24h: Decimal(string: "0.1299"),
+            low24h: Decimal(string: "0.1201"),
+            volume24h: nil,
+            updatedAt: nil,
+            connectionState: .live
+        )
+
+        let presentation = QuoteBoardPresentationState(
+            snapshot: snapshot,
+            marketDetails: MarketDetailsSnapshot(
+                open: Decimal(string: "0.1228"),
+                prevClose: Decimal(string: "0.1220"),
+                week52High: nil,
+                week52Low: nil,
+                marketCap: nil
+            ),
+            referenceStats: .empty,
+            lastSelectionError: nil
+        )
+
+        XCTAssertEqual(presentation.header.priceText, "$0.1234")
+        XCTAssertEqual(presentation.header.changeAmountText, "+0.0006")
+        XCTAssertEqual(presentation.stats[0].value, "$0.1228")
+        XCTAssertEqual(presentation.stats[1].value, "$0.1299")
+        XCTAssertEqual(presentation.stats[2].value, "$0.1201")
+        XCTAssertEqual(presentation.stats[3].value, "$0.1220")
+    }
 }

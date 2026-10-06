@@ -337,13 +337,7 @@ final class UserNotificationPriceAlertScheduler: PriceAlertNotificationSchedulin
     }
 
     private static func currencyText(_ value: Decimal) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 2
-        return formatter.string(from: value as NSDecimalNumber) ?? value.description
+        QuotePriceFormatter.currencyText(value)
     }
 }
 

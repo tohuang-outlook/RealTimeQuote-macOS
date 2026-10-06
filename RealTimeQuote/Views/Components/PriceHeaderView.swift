@@ -1,5 +1,40 @@
 import SwiftUI
 
+enum QuotePriceFormatter {
+    static func currencyText(_ value: Decimal?) -> String {
+        guard let value else { return "--" }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = fractionDigits(for: value)
+        formatter.maximumFractionDigits = fractionDigits(for: value)
+        formatter.usesGroupingSeparator = true
+        return formatter.string(from: value as NSDecimalNumber) ?? "--"
+    }
+
+    static func signedAmountText(_ value: Decimal?) -> String {
+        guard let value else { return "--" }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .decimal
+        formatter.positivePrefix = "+"
+        formatter.negativePrefix = "-"
+        formatter.minimumFractionDigits = fractionDigits(for: value)
+        formatter.maximumFractionDigits = fractionDigits(for: value)
+        formatter.usesGroupingSeparator = true
+        return formatter.string(from: value as NSDecimalNumber) ?? "--"
+    }
+
+    private static func fractionDigits(for value: Decimal) -> Int {
+        let magnitude = value < 0 ? -value : value
+        return magnitude < 10 ? 4 : 2
+    }
+}
+
 struct PriceHeaderView: View {
     enum ChangeTone: Equatable {
         case positive
