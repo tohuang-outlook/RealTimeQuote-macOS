@@ -77,3 +77,99 @@ final class UserDefaultsAppSettingsStore: AppSettingsStore {
         }
     }
 }
+
+enum PriceAlertDirection: String, CaseIterable, Codable, Identifiable {
+    case above
+    case below
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .above:
+            return "Above"
+        case .below:
+            return "Below"
+        }
+    }
+}
+
+struct PriceAlert: Codable, Equatable, Identifiable {
+    let id: UUID
+    let exchange: ExchangeID
+    let pair: TradingPair
+    let targetPrice: Decimal
+    let direction: PriceAlertDirection
+
+    init(
+        id: UUID = UUID(),
+        exchange: ExchangeID,
+        pair: TradingPair,
+        targetPrice: Decimal,
+        direction: PriceAlertDirection
+    ) {
+        self.id = id
+        self.exchange = exchange
+        self.pair = pair
+        self.targetPrice = targetPrice
+        self.direction = direction
+    }
+
+    func isTriggered(by price: Decimal) -> Bool {
+        switch direction {
+        case .above:
+            return price >= targetPrice
+        case .below:
+            return price <= targetPrice
+        }
+    }
+}
+
+protocol PriceAlertStoring: AnyObject {
+    func alert(for exchange: ExchangeID, pair: TradingPair) -> PriceAlert?
+    func save(_ alert: PriceAlert)
+    func clear(for exchange: ExchangeID, pair: TradingPair)
+}
+
+final class UserDefaultsPriceAlertStore: PriceAlertStoring {
+    private enum Keys {
+        static let alerts = "priceAlerts"
+    }
+
+    private let defaults: UserDefaults
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func alert(for exchange: ExchangeID, pair: TradingPair) -> PriceAlert? {
+        alerts.first { $0.exchange == exchange && $0.pair == pair }
+    }
+
+    func save(_ alert: PriceAlert) {
+        var updatedAlerts = alerts.filter { $0.exchange != alert.exchange || $0.pair != alert.pair }
+        updatedAlerts.append(alert)
+        persist(updatedAlerts)
+    }
+
+    func clear(for exchange: ExchangeID, pair: TradingPair) {
+        persist(alerts.filter { $0.exchange != exchange || $0.pair != pair })
+    }
+
+    private var alerts: [PriceAlert] {
+        guard
+            let data = defaults.data(forKey: Keys.alerts),
+            let decodedAlerts = try? decoder.decode([PriceAlert].self, from: data)
+        else {
+            return []
+        }
+        return decodedAlerts
+    }
+
+    private func persist(_ alerts: [PriceAlert]) {
+        guard let data = try? encoder.encode(alerts) else { return }
+        defaults.set(data, forKey: Keys.alerts)
+    }
+}

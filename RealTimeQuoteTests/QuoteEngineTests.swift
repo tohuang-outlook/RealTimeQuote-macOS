@@ -305,6 +305,38 @@ final class QuoteEngineTests: XCTestCase {
         XCTAssertNotNil(defaults.data(forKey: "selection"))
     }
 
+    func testViewModelTriggersMatchingPriceAlertOnlyOnce() async throws {
+        let settingsStore = InMemoryAppSettingsStore()
+        let alertStore = InMemoryPriceAlertStore()
+        let notificationScheduler = RecordingPriceAlertNotificationScheduler()
+        let stream = MockExchangeQuoteStream()
+        let engine = QuoteEngine(streamFactory: { _, _ in stream })
+        let viewModel = QuoteBoardViewModel(
+            initialSelection: AppBootstrapSelection(exchange: .coinbase, pair: .btcUSD),
+            settingsStore: settingsStore,
+            quoteEngine: engine,
+            priceAlertStore: alertStore,
+            notificationScheduler: notificationScheduler
+        )
+        await waitUntil { stream.startCalls.count == 1 }
+
+        viewModel.savePriceAlert(targetPrice: 100, direction: .below)
+        stream.emit(.didReceiveSnapshot(Self.makeSnapshot(exchange: .coinbase, pair: .btcUSD, price: 99)))
+
+        await waitUntilAsync { await notificationScheduler.notificationCount() == 1 }
+
+        XCTAssertNil(viewModel.priceAlert)
+        XCTAssertNil(alertStore.alert(for: .coinbase, pair: .btcUSD))
+        let firstNotification = await notificationScheduler.firstNotification()
+        XCTAssertEqual(firstNotification?.currentPrice, 99)
+
+        stream.emit(.didReceiveSnapshot(Self.makeSnapshot(exchange: .coinbase, pair: .btcUSD, price: 98)))
+        await settle()
+
+        let notificationCount = await notificationScheduler.notificationCount()
+        XCTAssertEqual(notificationCount, 1)
+    }
+
     private static func makeSnapshot(
         exchange: ExchangeID,
         pair: TradingPair,
@@ -344,6 +376,20 @@ final class QuoteEngineTests: XCTestCase {
             await Task.yield()
         }
         XCTFail("Timed out waiting for condition")
+    }
+
+    private func waitUntilAsync(
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        condition: @escaping () async -> Bool
+    ) async {
+        let deadline = ContinuousClock.now + .nanoseconds(Int(timeoutNanoseconds))
+        while ContinuousClock.now < deadline {
+            if await condition() {
+                return
+            }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for asynchronous condition")
     }
 }
 
@@ -416,6 +462,46 @@ private final class InMemoryAppSettingsStore: AppSettingsStore {
 
     func setSelection(exchange: ExchangeID, pair: TradingPair) {
         storedSelection = AppSelection(exchange: exchange, pair: pair)
+    }
+}
+
+private final class InMemoryPriceAlertStore: PriceAlertStoring {
+    private var alerts: [PriceAlert] = []
+
+    func alert(for exchange: ExchangeID, pair: TradingPair) -> PriceAlert? {
+        alerts.first { $0.exchange == exchange && $0.pair == pair }
+    }
+
+    func save(_ alert: PriceAlert) {
+        alerts.removeAll { $0.exchange == alert.exchange && $0.pair == alert.pair }
+        alerts.append(alert)
+    }
+
+    func clear(for exchange: ExchangeID, pair: TradingPair) {
+        alerts.removeAll { $0.exchange == exchange && $0.pair == pair }
+    }
+}
+
+private actor RecordingPriceAlertNotificationScheduler: PriceAlertNotificationScheduling {
+    struct Notification: Equatable {
+        let alert: PriceAlert
+        let currentPrice: Decimal
+    }
+
+    private(set) var notifications: [Notification] = []
+
+    func requestAuthorization() async {}
+
+    func firstNotification() -> Notification? {
+        notifications.first
+    }
+
+    func notificationCount() -> Int {
+        notifications.count
+    }
+
+    func scheduleNotification(for alert: PriceAlert, currentPrice: Decimal) async {
+        notifications.append(Notification(alert: alert, currentPrice: currentPrice))
     }
 }
 

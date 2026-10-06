@@ -5,13 +5,21 @@ prices from Coinbase and OKX. It supports BTC, ETH, ADA, SOL, XRP, and DOGE.
 
 ## Install
 
-1. Download and unzip `RealTimeQuote-1.0.2-macos.zip`.
+1. Download and unzip `RealTimeQuote-1.1.0-macos.zip`.
 2. Drag `RealTimeQuote.app` to `/Applications` or another permanent folder.
 3. Open the app. If macOS warns because the app is not notarized yet, use
    Control-click, choose **Open**, then confirm **Open**.
 
 The app needs an internet connection. Public Coinbase and OKX price feeds work
 without API credentials.
+
+## Price alerts
+
+Use the **Alert** button beside the connection badge to set one price alert per
+exchange and trading pair. Choose whether to trigger when the price moves
+above or below a USD target. Alerts are stored locally, notify once, and then
+clear automatically. macOS asks for notification permission when you save your
+first alert.
 
 ## Exchange symbols
 

@@ -280,6 +280,7 @@ private struct QuoteBoardLayoutMetrics {
 
 struct QuoteBoardView: View {
     @ObservedObject var viewModel: QuoteBoardViewModel
+    @State private var isPriceAlertEditorPresented = false
 
     var body: some View {
         let presentation = QuoteBoardPresentationState(
@@ -301,6 +302,7 @@ struct QuoteBoardView: View {
                         ExchangePickerView(selection: exchangeSelection)
                         TradingPairPickerView(selection: pairSelection)
                         Spacer(minLength: 0)
+                        priceAlertButton
                         ConnectionBadgeView(state: presentation.connectionState)
                     }
 
@@ -316,6 +318,20 @@ struct QuoteBoardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .sheet(isPresented: $isPriceAlertEditorPresented) {
+            PriceAlertEditorView(
+                exchange: viewModel.selectedExchange,
+                pair: viewModel.selectedPair,
+                currentPrice: viewModel.snapshot.lastPrice,
+                existingAlert: viewModel.priceAlert,
+                onSave: { targetPrice, direction in
+                    viewModel.savePriceAlert(targetPrice: targetPrice, direction: direction)
+                },
+                onClear: {
+                    viewModel.clearPriceAlert()
+                }
+            )
+        }
     }
 
     private var exchangeSelection: Binding<ExchangeID> {
@@ -330,6 +346,31 @@ struct QuoteBoardView: View {
             get: { viewModel.selectedPair },
             set: { viewModel.selectPair($0) }
         )
+    }
+
+    private var priceAlertButton: some View {
+        Button {
+            isPriceAlertEditorPresented = true
+        } label: {
+            Label(
+                viewModel.priceAlert == nil ? "Alert" : "Alert Set",
+                systemImage: viewModel.priceAlert == nil ? "bell" : "bell.fill"
+            )
+            .font(QuoteBoardTheme.regularFont(size: 12))
+            .foregroundStyle(viewModel.priceAlert == nil ? QuoteBoardTheme.primaryText : QuoteBoardTheme.caution)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(viewModel.priceAlert == nil ? QuoteBoardTheme.badgeFill : QuoteBoardTheme.caution.opacity(0.12))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(viewModel.priceAlert == nil ? QuoteBoardTheme.cardStroke : QuoteBoardTheme.caution.opacity(0.45), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Configure price alert")
     }
 
     @ViewBuilder
@@ -378,5 +419,128 @@ struct QuoteBoardView: View {
                 .frame(width: metrics.statsColumnWidth, alignment: .topLeading)
             }
         }
+    }
+}
+
+private struct PriceAlertEditorView: View {
+    let exchange: ExchangeID
+    let pair: TradingPair
+    let currentPrice: Decimal?
+    let existingAlert: PriceAlert?
+    let onSave: (Decimal, PriceAlertDirection) -> Void
+    let onClear: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var targetText: String
+    @State private var direction: PriceAlertDirection
+
+    init(
+        exchange: ExchangeID,
+        pair: TradingPair,
+        currentPrice: Decimal?,
+        existingAlert: PriceAlert?,
+        onSave: @escaping (Decimal, PriceAlertDirection) -> Void,
+        onClear: @escaping () -> Void
+    ) {
+        self.exchange = exchange
+        self.pair = pair
+        self.currentPrice = currentPrice
+        self.existingAlert = existingAlert
+        self.onSave = onSave
+        self.onClear = onClear
+        _targetText = State(initialValue: Self.targetText(existingAlert?.targetPrice ?? currentPrice))
+        _direction = State(initialValue: existingAlert?.direction ?? .above)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Set price alert")
+                    .font(QuoteBoardTheme.boldFont(size: 20))
+                Text("\(pair.displaySymbol(for: exchange)) on \(exchange.displayName)")
+                    .font(QuoteBoardTheme.regularFont(size: 13))
+                    .foregroundStyle(QuoteBoardTheme.secondaryText)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Trigger when price is")
+                    .font(QuoteBoardTheme.regularFont(size: 12))
+                    .foregroundStyle(QuoteBoardTheme.secondaryText)
+
+                Picker("Direction", selection: $direction) {
+                    ForEach(PriceAlertDirection.allCases) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Target price (USD)")
+                    .font(QuoteBoardTheme.regularFont(size: 12))
+                    .foregroundStyle(QuoteBoardTheme.secondaryText)
+
+                TextField("Target price", text: $targetText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(QuoteBoardTheme.regularFont(size: 15))
+            }
+
+            if let currentPrice {
+                Text("Current price: \(Self.currencyText(currentPrice))")
+                    .font(QuoteBoardTheme.regularFont(size: 12))
+                    .foregroundStyle(QuoteBoardTheme.tertiaryText)
+            }
+
+            HStack {
+                if existingAlert != nil {
+                    Button("Clear") {
+                        onClear()
+                        dismiss()
+                    }
+                    .foregroundStyle(QuoteBoardTheme.errorText)
+                }
+
+                Spacer()
+
+                Button("Cancel") {
+                    dismiss()
+                }
+
+                Button("Save alert") {
+                    guard let targetPrice else { return }
+                    onSave(targetPrice, direction)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(targetPrice == nil)
+            }
+        }
+        .padding(24)
+        .frame(width: 360)
+        .background(QuoteBoardTheme.cardFill)
+    }
+
+    private var targetPrice: Decimal? {
+        let normalizedTarget = targetText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let target = Decimal(string: normalizedTarget, locale: Locale(identifier: "en_US_POSIX")), target > 0 else {
+            return nil
+        }
+        return target
+    }
+
+    private static func targetText(_ price: Decimal?) -> String {
+        guard let price else { return "" }
+        return NSDecimalNumber(decimal: price).stringValue
+    }
+
+    private static func currencyText(_ value: Decimal) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 2
+        return formatter.string(from: value as NSDecimalNumber) ?? value.description
     }
 }

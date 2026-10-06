@@ -100,6 +100,32 @@ final class TradingPairTests: XCTestCase {
         XCTAssertEqual(reader.selectedPair, TradingPair.ethUSD)
     }
 
+    func testPriceAlertStoreReplacesOnlyTheMatchingExchangeAndPair() {
+        let suiteName = "RealTimeQuoteTests.TradingPairTests.PriceAlerts.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        addTeardownBlock {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = UserDefaultsPriceAlertStore(defaults: defaults)
+        let btcAlert = PriceAlert(exchange: .coinbase, pair: .btcUSD, targetPrice: 100_000, direction: .above)
+        let replacementBTCAlert = PriceAlert(exchange: .coinbase, pair: .btcUSD, targetPrice: 90_000, direction: .below)
+        let ethAlert = PriceAlert(exchange: .coinbase, pair: .ethUSD, targetPrice: 2_000, direction: .above)
+
+        store.save(btcAlert)
+        store.save(ethAlert)
+        store.save(replacementBTCAlert)
+
+        XCTAssertEqual(store.alert(for: .coinbase, pair: .btcUSD), replacementBTCAlert)
+        XCTAssertEqual(store.alert(for: .coinbase, pair: .ethUSD), ethAlert)
+
+        store.clear(for: .coinbase, pair: .btcUSD)
+
+        XCTAssertNil(store.alert(for: .coinbase, pair: .btcUSD))
+        XCTAssertEqual(store.alert(for: .coinbase, pair: .ethUSD), ethAlert)
+    }
+
     func testDisconnectedStateUsesStableDomainReason() {
         XCTAssertEqual(
             ConnectionState.disconnected(ConnectionIssue.networkFailure),
