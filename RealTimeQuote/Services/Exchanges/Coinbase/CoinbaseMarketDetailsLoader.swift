@@ -34,6 +34,35 @@ final class CoinbaseMarketDetailsLoader: ExchangeMarketDetailsLoading {
         )
     }
 
+    func load24HourHistory(for pair: TradingPair) async throws -> PriceHistorySnapshot {
+        let end = Date()
+        let start = end.addingTimeInterval(-86_400)
+
+        var components = URLComponents(string: "https://api.exchange.coinbase.com/products/\(pair.coinbaseProductID)/candles")
+        components?.queryItems = [
+            URLQueryItem(name: "granularity", value: "3600"),
+            URLQueryItem(name: "start", value: iso8601Formatter.string(from: start)),
+            URLQueryItem(name: "end", value: iso8601Formatter.string(from: end))
+        ]
+
+        guard let url = components?.url else {
+            throw MarketDetailsLoaderError.invalidRequest
+        }
+
+        let (data, response) = try await session.data(from: url)
+        try validate(response: response)
+        let candles = try JSONDecoder().decode([CoinbaseCandle].self, from: data)
+        let points = candles
+            .map { PriceHistoryPoint(timestamp: Date(timeIntervalSince1970: TimeInterval($0.time)), price: $0.close) }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard points.count > 1 else {
+            throw MarketDetailsLoaderError.missingData
+        }
+
+        return PriceHistorySnapshot(exchange: .coinbase, pair: pair, points: points)
+    }
+
     private func loadDailyCandles(for pair: TradingPair) async throws -> [CoinbaseCandle] {
         let end = Date()
         let start = calendar.date(byAdding: .day, value: -3, to: end) ?? end.addingTimeInterval(-259_200)

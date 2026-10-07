@@ -5,7 +5,7 @@ prices from Coinbase and OKX. It supports BTC, ETH, ADA, SOL, XRP, and DOGE.
 
 ## Install
 
-1. Download and unzip `RealTimeQuote-1.1.1-macos.zip`.
+1. Download and unzip `RealTimeQuote-1.2.0-macos.zip`.
 2. Drag `RealTimeQuote.app` to `/Applications` or another permanent folder.
 3. Open the app. If macOS warns because the app is not notarized yet, use
    Control-click, choose **Open**, then confirm **Open**.
@@ -20,6 +20,12 @@ exchange and trading pair. Choose whether to trigger when the price moves
 above or below a USD target. Alerts are stored locally, notify once, and then
 clear automatically. macOS asks for notification permission when you save your
 first alert.
+
+## 24-hour price chart
+
+The compact chart below the main price shows the most recent 24 one-hour
+candles for the selected exchange and coin. Its final point follows the live
+price feed, and the line is green or red according to the period's direction.
 
 ## Price precision
 

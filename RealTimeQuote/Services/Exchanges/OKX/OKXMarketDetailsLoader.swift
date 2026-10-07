@@ -33,6 +33,37 @@ final class OKXMarketDetailsLoader: ExchangeMarketDetailsLoading {
         )
     }
 
+    func load24HourHistory(for pair: TradingPair) async throws -> PriceHistorySnapshot {
+        var components = URLComponents(string: "https://openapi.okx.com/api/v5/market/candles")
+        components?.queryItems = [
+            URLQueryItem(name: "instId", value: pair.okxInstrumentID),
+            URLQueryItem(name: "bar", value: "1H"),
+            URLQueryItem(name: "limit", value: "24")
+        ]
+
+        guard let url = components?.url else {
+            throw MarketDetailsLoaderError.invalidRequest
+        }
+
+        let (data, response) = try await session.data(from: url)
+        try validate(response: response)
+        let payload = try JSONDecoder().decode(OKXCandlesResponse.self, from: data)
+        let points = payload.data
+            .map {
+                PriceHistoryPoint(
+                    timestamp: Date(timeIntervalSince1970: TimeInterval($0.timestampMilliseconds) / 1_000),
+                    price: $0.close
+                )
+            }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        guard points.count > 1 else {
+            throw MarketDetailsLoaderError.missingData
+        }
+
+        return PriceHistorySnapshot(exchange: .okx, pair: pair, points: points)
+    }
+
     private func loadTicker(for pair: TradingPair) async throws -> OKXMarketTicker {
         var components = URLComponents(string: "https://openapi.okx.com/api/v5/market/ticker")
         components?.queryItems = [

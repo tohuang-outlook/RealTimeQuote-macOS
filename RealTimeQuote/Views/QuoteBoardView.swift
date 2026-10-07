@@ -356,6 +356,8 @@ struct QuoteBoardView: View {
                 content: presentation.header,
                 heroPriceFontSize: metrics.heroPriceFontSize
             )
+
+            PriceSparklineView(history: viewModel.priceHistory)
         }
     }
 

@@ -7,6 +7,7 @@ final class QuoteBoardViewModel: ObservableObject {
     @Published private(set) var snapshot: QuoteSnapshot
     @Published private(set) var marketDetails: MarketDetailsSnapshot
     @Published private(set) var referenceStats: ReferenceStatsSnapshot
+    @Published private(set) var priceHistory: PriceHistorySnapshot
     @Published private(set) var selectedExchange: ExchangeID
     @Published private(set) var selectedPair: TradingPair
     @Published private(set) var lastSelectionError: String?
@@ -15,6 +16,7 @@ final class QuoteBoardViewModel: ObservableObject {
     private let quoteEngine: QuoteEngine
     private let marketDetailsLoader: ExchangeMarketDetailsLoading
     private let referenceStatsLoader: ReferenceStatsLoading
+    private let priceHistoryLoader: PriceHistoryLoading
     private let settingsStore: AppSettingsStore
     private let priceAlertStore: PriceAlertStoring
     private let notificationScheduler: PriceAlertNotificationScheduling
@@ -24,6 +26,7 @@ final class QuoteBoardViewModel: ObservableObject {
     private var selectionAttempt: UInt64 = 0
     private var marketDetailsTask: Task<Void, Never>?
     private var referenceStatsTask: Task<Void, Never>?
+    private var priceHistoryTask: Task<Void, Never>?
 
     static let preview = QuoteBoardViewModel(
         snapshot: QuoteSnapshot.placeholder(for: .btcUSD, exchange: .coinbase)
@@ -35,6 +38,7 @@ final class QuoteBoardViewModel: ObservableObject {
         quoteEngine: QuoteEngine,
         marketDetailsLoader: ExchangeMarketDetailsLoading = NoOpExchangeMarketDetailsLoader(),
         referenceStatsLoader: ReferenceStatsLoading = NoOpReferenceStatsLoader(),
+        priceHistoryLoader: PriceHistoryLoading = NoOpPriceHistoryLoader(),
         priceAlertStore: PriceAlertStoring = UserDefaultsPriceAlertStore(),
         notificationScheduler: PriceAlertNotificationScheduling = UserNotificationPriceAlertScheduler(),
         startupRetryAttempts: Int = 3,
@@ -46,6 +50,7 @@ final class QuoteBoardViewModel: ObservableObject {
         self.quoteEngine = quoteEngine
         self.marketDetailsLoader = marketDetailsLoader
         self.referenceStatsLoader = referenceStatsLoader
+        self.priceHistoryLoader = priceHistoryLoader
         self.settingsStore = settingsStore
         self.priceAlertStore = priceAlertStore
         self.notificationScheduler = notificationScheduler
@@ -56,6 +61,7 @@ final class QuoteBoardViewModel: ObservableObject {
         self.snapshot = quoteEngine.snapshot
         self.marketDetails = .empty
         self.referenceStats = .empty
+        self.priceHistory = .empty
         self.priceAlert = priceAlertStore.alert(for: selectedExchange, pair: selectedPair)
 
         quoteEngine.$snapshot
@@ -71,6 +77,7 @@ final class QuoteBoardViewModel: ObservableObject {
                 try await self.startupConnect(exchange: selectedExchange, pair: selectedPair)
                 self.refreshMarketDetails(exchange: selectedExchange, pair: selectedPair)
                 self.refreshReferenceStats(pair: selectedPair)
+                self.refreshPriceHistory(exchange: selectedExchange, pair: selectedPair)
             } catch {
                 guard attempt == self.selectionAttempt else { return }
                 guard !(error is CancellationError) else { return }
@@ -83,6 +90,7 @@ final class QuoteBoardViewModel: ObservableObject {
         self.quoteEngine = QuoteEngine(initialSnapshot: snapshot, streamFactory: { _, _ in PreviewExchangeQuoteStream() })
         self.marketDetailsLoader = NoOpExchangeMarketDetailsLoader()
         self.referenceStatsLoader = NoOpReferenceStatsLoader()
+        self.priceHistoryLoader = NoOpPriceHistoryLoader()
         self.settingsStore = Self.makePreviewSettingsStore()
         self.priceAlertStore = UserDefaultsPriceAlertStore(defaults: UserDefaults(suiteName: "RealTimeQuote.QuoteBoardViewModel.preview.alerts") ?? .standard)
         self.notificationScheduler = NoOpPriceAlertNotificationScheduler()
@@ -93,6 +101,7 @@ final class QuoteBoardViewModel: ObservableObject {
         self.snapshot = snapshot
         self.marketDetails = .empty
         self.referenceStats = .empty
+        self.priceHistory = .empty
         self.priceAlert = nil
 
         quoteEngine.$snapshot
@@ -110,6 +119,7 @@ final class QuoteBoardViewModel: ObservableObject {
         let previousPair = selectedPair
         let previousMarketDetails = marketDetails
         let previousReferenceStats = referenceStats
+        let previousPriceHistory = priceHistory
         let previousPriceAlert = priceAlert
         selectionAttempt &+= 1
         let attempt = selectionAttempt
@@ -117,6 +127,7 @@ final class QuoteBoardViewModel: ObservableObject {
         selectedExchange = exchange
         marketDetails = .empty
         referenceStats = .empty
+        priceHistory = .empty
         priceAlert = priceAlertStore.alert(for: exchange, pair: previousPair)
         lastSelectionError = nil
 
@@ -127,12 +138,14 @@ final class QuoteBoardViewModel: ObservableObject {
                 self.settingsStore.setSelection(exchange: exchange, pair: previousPair)
                 self.refreshMarketDetails(exchange: exchange, pair: previousPair)
                 self.refreshReferenceStats(pair: previousPair)
+                self.refreshPriceHistory(exchange: exchange, pair: previousPair)
             } catch {
                 guard attempt == self.selectionAttempt else { return }
                 self.selectedExchange = previousExchange
                 self.selectedPair = previousPair
                 self.marketDetails = previousMarketDetails
                 self.referenceStats = previousReferenceStats
+                self.priceHistory = previousPriceHistory
                 self.priceAlert = previousPriceAlert
                 self.lastSelectionError = error.localizedDescription
             }
@@ -146,6 +159,7 @@ final class QuoteBoardViewModel: ObservableObject {
         let previousPair = selectedPair
         let previousMarketDetails = marketDetails
         let previousReferenceStats = referenceStats
+        let previousPriceHistory = priceHistory
         let previousPriceAlert = priceAlert
         selectionAttempt &+= 1
         let attempt = selectionAttempt
@@ -153,6 +167,7 @@ final class QuoteBoardViewModel: ObservableObject {
         selectedPair = pair
         marketDetails = .empty
         referenceStats = .empty
+        priceHistory = .empty
         priceAlert = priceAlertStore.alert(for: previousExchange, pair: pair)
         lastSelectionError = nil
 
@@ -163,12 +178,14 @@ final class QuoteBoardViewModel: ObservableObject {
                 self.settingsStore.setSelection(exchange: previousExchange, pair: pair)
                 self.refreshMarketDetails(exchange: previousExchange, pair: pair)
                 self.refreshReferenceStats(pair: pair)
+                self.refreshPriceHistory(exchange: previousExchange, pair: pair)
             } catch {
                 guard attempt == self.selectionAttempt else { return }
                 self.selectedExchange = previousExchange
                 self.selectedPair = previousPair
                 self.marketDetails = previousMarketDetails
                 self.referenceStats = previousReferenceStats
+                self.priceHistory = previousPriceHistory
                 self.priceAlert = previousPriceAlert
                 self.lastSelectionError = error.localizedDescription
             }
@@ -196,6 +213,9 @@ final class QuoteBoardViewModel: ObservableObject {
 
     private func handleSnapshot(_ snapshot: QuoteSnapshot) {
         self.snapshot = snapshot
+        if priceHistory.exchange == snapshot.exchange, priceHistory.pair == snapshot.pair {
+            priceHistory = priceHistory.updatingLatest(price: snapshot.lastPrice, at: snapshot.updatedAt)
+        }
         evaluatePriceAlert(for: snapshot)
     }
 
@@ -255,6 +275,26 @@ final class QuoteBoardViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard self.selectedPair == pair else { return }
                 self.referenceStats = .empty
+            }
+        }
+    }
+
+    private func refreshPriceHistory(exchange: ExchangeID, pair: TradingPair) {
+        priceHistoryTask?.cancel()
+        priceHistoryTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let history = try await self.priceHistoryLoader.load24HourHistory(for: exchange, pair: pair)
+                guard !Task.isCancelled else { return }
+                guard self.selectedExchange == exchange, self.selectedPair == pair else { return }
+                self.priceHistory = history.updatingLatest(price: self.snapshot.lastPrice, at: self.snapshot.updatedAt)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                guard self.selectedExchange == exchange, self.selectedPair == pair else { return }
+                self.priceHistory = .empty
             }
         }
     }

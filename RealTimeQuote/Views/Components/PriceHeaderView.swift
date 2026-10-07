@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 enum QuotePriceFormatter {
@@ -100,6 +101,71 @@ struct PriceHeaderView: View {
             return QuoteBoardTheme.negative
         case .neutral:
             return QuoteBoardTheme.neutral
+        }
+    }
+}
+
+struct PriceSparklineView: View {
+    let history: PriceHistorySnapshot
+
+    private var points: [PriceHistoryPoint] {
+        history.points
+    }
+
+    private var trendColor: Color {
+        guard let first = points.first?.price, let last = points.last?.price else {
+            return QuoteBoardTheme.neutral
+        }
+        if last > first { return QuoteBoardTheme.positive }
+        if last < first { return QuoteBoardTheme.negative }
+        return QuoteBoardTheme.neutral
+    }
+
+    private var priceDomain: ClosedRange<Double> {
+        let values = points.map { NSDecimalNumber(decimal: $0.price).doubleValue }
+        let low = values.min() ?? 0
+        let high = values.max() ?? 1
+        let spread = high - low
+        let padding = max(spread * 0.12, max(abs(high) * 0.002, 0.0001))
+        return (low - padding)...(high + padding)
+    }
+
+    var body: some View {
+        if points.count > 1 {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("24H PRICE")
+                    .font(QuoteBoardTheme.boldFont(size: 10))
+                    .foregroundStyle(QuoteBoardTheme.tertiaryText)
+
+                Chart(points) { point in
+                    AreaMark(
+                        x: .value("Time", point.timestamp),
+                        y: .value("Price", NSDecimalNumber(decimal: point.price).doubleValue)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [trendColor.opacity(0.28), trendColor.opacity(0.01)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("Time", point.timestamp),
+                        y: .value("Price", NSDecimalNumber(decimal: point.price).doubleValue)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(trendColor)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis(.hidden)
+                .chartLegend(.hidden)
+                .chartYScale(domain: priceDomain)
+                .frame(height: 42)
+                .accessibilityLabel("24-hour price chart")
+                .accessibilityValue("\(QuotePriceFormatter.currencyText(points.first?.price)) to \(QuotePriceFormatter.currencyText(points.last?.price))")
+            }
         }
     }
 }

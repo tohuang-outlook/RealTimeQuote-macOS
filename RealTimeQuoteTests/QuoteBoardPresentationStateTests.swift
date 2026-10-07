@@ -2,6 +2,35 @@ import XCTest
 @testable import RealTimeQuote
 
 final class QuoteBoardPresentationStateTests: XCTestCase {
+    func testPriceHistoryReplacesOnlyItsLiveEndpoint() {
+        let hourAgo = Date(timeIntervalSince1970: 1_780_177_440)
+        let now = Date(timeIntervalSince1970: 1_780_181_040)
+        let history = PriceHistorySnapshot(
+            exchange: .coinbase,
+            pair: .dogeUSD,
+            points: [
+                PriceHistoryPoint(timestamp: hourAgo, price: Decimal(string: "0.1200")!),
+                PriceHistoryPoint(timestamp: hourAgo.addingTimeInterval(1_800), price: Decimal(string: "0.1210")!)
+            ]
+        )
+
+        let updated = history.updatingLatest(price: Decimal(string: "0.1234"), at: now)
+
+        XCTAssertEqual(updated.points.count, 2)
+        XCTAssertEqual(updated.points.first?.price, Decimal(string: "0.1200"))
+        XCTAssertEqual(updated.points.last?.price, Decimal(string: "0.1234"))
+        XCTAssertEqual(updated.points.last?.timestamp, now)
+    }
+
+    func testPriceHistoryDoesNotCreateDataWhenThereAreNoCandles() {
+        let updated = PriceHistorySnapshot.empty.updatingLatest(
+            price: Decimal(string: "73707.82"),
+            at: Date()
+        )
+
+        XCTAssertEqual(updated, .empty)
+    }
+
     func testPresentationStateUsesSingleSnapshotIdentityAndFormatsValues() {
         let snapshot = QuoteSnapshot(
             exchange: .coinbase,

@@ -71,7 +71,8 @@ final class AppDependencies: ObservableObject {
             settingsStore: settingsStore,
             quoteEngine: quoteEngine,
             marketDetailsLoader: DefaultExchangeMarketDetailsLoader(),
-            referenceStatsLoader: CoinGeckoReferenceStatsLoader(config: config?.coinGecko)
+            referenceStatsLoader: CoinGeckoReferenceStatsLoader(config: config?.coinGecko),
+            priceHistoryLoader: DefaultPriceHistoryLoader()
         )
     }
 
